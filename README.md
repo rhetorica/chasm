@@ -2,13 +2,13 @@
 
 # CHASM Simulator
 
-This VS Code project implements a simulator of the CHASM computer architecture. It is written in C with a very restrained amount of C++.
+This VS Code project implements a simulator of the CHASM computer architecture. It is written in procedural C++ (minimal use of OOP).
 
 ## About CHASM
 
-CHASM's purpose is to provide a starting platform for the LETHE hobbyist operating system, and more generally to bootstrap microkernel-based systems being developed from scratch without using an off-the-shelf compiler toolchain. Like most real-world CPUs, CHASM is a von Neumann machine with a register-based architecture. It uses 16-bit instruction words and memory addresses with 64-bit registers, and has a feature set somewhere between the MIPS and m68k ISAs. In interms of complexity it is best described as RISC-like.
+CHASM's purpose is to provide a starting platform for the LETHE hobbyist operating system, and more generally to bootstrap microkernel-based systems being developed from scratch without using an off-the-shelf compiler toolchain. Like most real-world CPUs, CHASM is a von Neumann machine with a register-based architecture. It uses 16-bit instruction words and memory addresses with 64-bit registers, and has a feature set only a little more powerful than MIPS. In interms of ISA complexity it is best described as semi-RISC.
 
-See http://lethe.rhetori.ca/chasm-spec.txt for a description of the CHASM CPU and related hardware, including the full assembly language used by the CHAS assembler.
+See https://github.com/rhetorica/chas/blob/master/doc/chasm-spec.txt for a description of the CHASM CPU and related hardware, including the full assembly language used by the CHAS assembler.
 
 
 ## Usage
