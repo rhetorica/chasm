@@ -1,0 +1,28 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [{
+        "name": "(Windows) Launch",
+        "type": "cppvsdbg",
+        "request": "launch",
+        "program": "C:\\Lethe\\chasm\\build\\chasm.exe",
+        "args": ["--rom","..\\rom\\blank.rom"],
+        "cwd": "C:\\Lethe\\userland",
+        "stopAtEntry": false,
+        "environment": [],
+        "console": "externalTerminal"
+    }, {
+        "name": "C++ Launch (MinGW64)",
+        "program": "C:\\Lethe\\chasm\\build\\chasm.exe",
+        "args": ["--rom","..\\rom\\blank.rom"],
+        "cwd": "C:\\Lethe\\userland",
+        "type": "cppvsdbg",
+        "request": "launch",
+        "logging": {
+            "moduleLoad": false,
+            "trace": true
+        },
+    }]
+}
