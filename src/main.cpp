@@ -44,7 +44,7 @@ octet* load_file(const char* filename, regt& filesize) {
         filesize = pos;
         fpos_t file_length = pos;
 		// printf(" -- file length: %i\n", pos);
-        octet* filedata = (octet*)calloc(file_length, sizeof(octet));
+        octet* filedata = (octet*)malloc_aligned(file_length);
         fseek(f, 0, 0);
 
 		fread(filedata, sizeof(octet), file_length, f);

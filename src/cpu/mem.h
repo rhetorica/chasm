@@ -484,4 +484,20 @@ void fill_block(regt value, regt dst, regt size);
 octet* clone_block(regt src, regt size);
 void store_block(octet* src, regt dst, regt size);
 
+// pinched from UAE via Hatari via Previous
+/* Allocate aligned memory: */
+static inline uint8_t* malloc_aligned(size_t size) {
+#if defined(HAVE_POSIX_MEMALIGN)
+	void* result = NULL;
+	posix_memalign(&result, 0x10000, size);
+	return (uint8_t*)result;
+#elif defined(HAVE_ALIGNED_ALLOC)
+	return (uint8_t*)aligned_alloc(0x10000, size);
+#elif defined(HAVE__ALIGNED_MALLOC)
+	return (uint8_t*)_aligned_malloc(0x10000, size);
+#else
+	return (uint8_t*)malloc(size);
+#endif
+}
+
 #endif // MEM_H

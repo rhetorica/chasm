@@ -10,12 +10,12 @@ typedef void opfunc(
 );
 
 struct opt {
-    memt op;    opfunc* impl;   octet r0; octet r1;    octet r2; octet b;    octet attribs; octet skip; octet w;
+    memt op;    opfunc* impl;   octet r0; octet r1;    octet r2; octet b;    octet attribs; octet skip; octet w; regt dummy;
 };
 // attribs: [6 unused][1 bit vp][1 bit ap]
 
 extern struct opt oplist[];
-extern struct opt* opspace;
+extern struct opt opspace[65536];
 
 void build_opspace();
 extern int oplist_last;

@@ -2,6 +2,7 @@
 #include <malloc.h>
 #include <math.h>
 #include <time.h>
+#include <SDL3/SDL.h>
 
 #include "../types.h"
 #include "cpu.h"
@@ -9,6 +10,8 @@
 #include "../dev.h"
 #include "mem.h"
 #include "ops.h"
+#include "../video.h"
+#include "../main.h"
 
 regt ins_count = 0;
 
@@ -313,13 +316,43 @@ void create_default_interrupts() {
 // IMPORTANT: When modifying reg[csrPC] after loading an immediate, make sure it happens at the end of the opcode
 // implementation, or page faults may not resume at the right address!
 
+regt last_block = -1;
 regt last_PC = -1;
 memt* last_pointer = NULL;
 
-void execute() {
-    ins_count += 1;
+#define INS_ADDRESS_MASK 0x0000ffffffffff00
 
-    octet* ins_p = mem(reg[csrPC], MMT_EXECUTABLE_MASK);
+octet* ins_p;
+
+clock_t current_time = 0;
+regt last_ins = 0;
+
+static __forceinline void execute() {
+    ins_count += 1;
+    if(video_enabled) {
+        if((ins_count & 0x3ffffff) == 0) {
+            clock_t new_time = clock();
+            char time_string[128];
+            sprintf(time_string, "CHASM - %02llu MHz",
+                (regt)(((double)0x3ffffff / ((double)(new_time - current_time) / CLOCKS_PER_SEC)) / 1000000)
+            );
+            int r = SDL_SetWindowTitle(ChasmWindow, time_string);
+            last_ins = ins_count;
+            /*if(r)
+                SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't change title: %s", SDL_GetError());*/
+            
+            current_time = new_time;
+        }
+    }
+
+    if((reg[csrPC] & INS_ADDRESS_MASK) == last_block) {
+        ins_p += (reg[csrPC] - last_PC) * sizeof(memt);
+    } else {
+        ins_p = mem(reg[csrPC], MMT_EXECUTABLE_MASK);
+    }
+    last_block = reg[csrPC] & INS_ADDRESS_MASK;
+    last_PC = reg[csrPC];
+
     // memt ins = (((memt)*ins_p) << 8) | (memt)*(ins_p + 1);
     memt ins;
     ins = mem_to_reg16(*reinterpret_cast<memt*>(ins_p));
@@ -360,16 +393,18 @@ void execute() {
         ins_traits.skip = (pt[15] >> 4) & 0xf;
         ins_traits.w = pt[15] & 0xf;
     }*/
-    /*
+    
+    #ifdef VERBOSITY_MODE
     if(verbosity >= 3) {
-        fprintf(stderr, "\tpacked = 0x%016llx %04x %04x %04x %04x", op->impl, op->op, op->r0r1, op->r2b, op->attribs);
-        fprintf(stderr, "\tunpacked = %02x %02x %02x %02x %02x %02x %02x %02x",
+        fprintf(stderr, "\t@%016llx = 0x%016llx %04x %02x %02x %02x %02x %02x %02x %02x\n", reg[csrPC] - 1, op->impl, op->op, op->r0, op->r1, op->r2, op->b, op->w, op->skip, op->attribs);
+        /*fprintf(stderr, "\tunpacked = %02x %02x %02x %02x %02x %02x %02x %02x",
          ins_traits.r0, ins_traits.r1, ins_traits.r2, ins_traits.b,
          ins_traits.vp, ins_traits.ap, ins_traits.skip, ins_traits.w
-        );
-        fprintf(stderr, "\t%016llx\t%04x = 0x%02x 0x%02x :: (%c, %c, %c, 0x%02x)\n", reg[csrPC] - 1, ins,
-        ins_traits.skip, ins_traits.w, ins_traits.r0 + 'a', ins_traits.r1 + 'a', ins_traits.r2 + 'a', ins_traits.b);
-    }*/
+        );*/
+        /*fprintf(stderr, "\t%016llx\t%04x = 0x%02x 0x%02x :: (%c, %c, %c, 0x%02x)\n", reg[csrPC] - 1, ins,
+        ins_traits.skip, ins_traits.w, ins_traits.r0 + 'a', ins_traits.r1 + 'a', ins_traits.r2 + 'a', ins_traits.b);*/
+    }
+    #endif
     
     (*(op->impl))(op);
     reg[csrPC] += op->skip;
@@ -385,6 +420,8 @@ void init_cpu() {
     reg[csrSTATUS] = reg[csrPC] = 0;
 
     (reinterpret_cast<memt*>(sysmem))[0] = reg_to_mem16(0x600f);
+
+    ins_p = sysmem;
     
     storev64(1, START_ADDRESS); // imm
     /* dump_memory(0x0, 0x32);
@@ -407,7 +444,7 @@ void init_cpu() {
             call_interrupt(0x02, true);
         }
         
-        reg[csrSTATUS] &= ~FLAG_MASK_J;
+        // reg[csrSTATUS] &= ~FLAG_MASK_J;
         /*
         if(reg[csrPC] == STOP_GUARD) {
             printf(" -- hit stop guard at 0x%llx\n", (regt)STOP_GUARD);

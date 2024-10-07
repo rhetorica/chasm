@@ -1032,14 +1032,6 @@ struct opt oplist[] = {
     {0x0b5f, &op_flip,	255,   5, 255, 0xff, 0x02, 0x00, 0x00}, // flip f   
     {0x0b6f, &op_flip,	255,   6, 255, 0xff, 0x02, 0x00, 0x00}, // flip g   
     {0x0b7f, &op_flip,	255,   7, 255, 0xff, 0x02, 0x00, 0x00}, // flip h   
-    {0x0b8f, &op_flip,	255,   8, 255, 0xff, 0x02, 0x00, 0x00}, // flip pc   
-    {0x0b9f, &op_flip,	255,   9, 255, 0xff, 0x02, 0x00, 0x00}, // flip ra   
-    {0x0baf, &op_flip,	255,  10, 255, 0xff, 0x02, 0x00, 0x00}, // flip sb   
-    {0x0bbf, &op_flip,	255,  11, 255, 0xff, 0x02, 0x00, 0x00}, // flip sp   
-    {0x0bcf, &op_flip,	255,  12, 255, 0xff, 0x02, 0x00, 0x00}, // flip db   
-    {0x0bdf, &op_flip,	255,  13, 255, 0xff, 0x02, 0x00, 0x00}, // flip cb   
-    {0x0bef, &op_flip,	255,  14, 255, 0xff, 0x02, 0x00, 0x00}, // flip pi   
-    {0x0bff, &op_flip,	255,  15, 255, 0xff, 0x02, 0x00, 0x00}, // flip status   
     {0x0c00, &op_copy,	  0,   0, 255, 0xff, 0x02, 0x00, 0x00}, // copy a a  
     {0x0c10, &op_copy,	  0,   1, 255, 0xff, 0x02, 0x00, 0x00}, // copy a b  
     {0x0c20, &op_copy,	  0,   2, 255, 0xff, 0x02, 0x00, 0x00}, // copy a c  
@@ -43940,7 +43932,7 @@ struct opt oplist[] = {
 	{0xee3f, &op_strcmp,	  7,   7, 255, 0xff, 0x01, 0x00, 0x04}, // strcmp h h  
 };
 int oplist_last = 0xee3f;
-struct opt* opspace;
+struct opt opspace[65536];
 
 // 0, 1, 2, 3, 4 words:
 regt word_size_masks[] = {0xffffffffffffffff, 0xffff, 0xffffffff, 0x0, 0xffffffffffffffff};
@@ -43956,8 +43948,14 @@ void op_illegal(struct opt* p) {
 
 void build_opspace() {
     fprintf(stderr, " -- building opspace...\n");
-    opspace = (struct opt*)calloc(0x10000, sizeof(struct opt));
-    int i = 0;
+    // opspace = (struct opt*)malloc_aligned(0x10000 * sizeof(struct opt));
+    int i = 65536;
+    while(i--) {
+        opspace[i] = illegal;
+        opspace[i].r0 = i >> 8;
+        opspace[i].r1 = i & 0xff;
+    }
+    i = 0;
     struct opt* o = &(oplist[i]);
     opspace[i] = *o;
     do {
@@ -43966,14 +43964,6 @@ void build_opspace() {
         opspace[op] = *o;
     } while (o->op != oplist_last);
     fprintf(stderr, " -- mapped %u ops\n", i);
-    i = 0x10000;
-    while(i--) {
-        if(opspace[i].op == 0x0000 && i != 0) {
-            opspace[i] = illegal;
-            opspace[i].r0 = i >> 8;
-            opspace[i].r1 = i & 0xff;
-        }
-    }
     fprintf(stderr, " -- filled blanks\n");
 }
 
@@ -44144,10 +44134,10 @@ void op_cdr(struct opt* p) {
 }
 
 void op_flip(struct opt* p) {
-	// if(verbosity & 2) printf("op_flip()\n");
-    regt temp = reg[p->r0 | 0x10];
-    reg[p->r0 | 0x10] = reg[p->r0];
-    reg[p->r0] = temp;
+	// if(verbosity & 2) printf("op_flip(%c)\n", p->r1 + 'A');
+    regt temp = reg[p->r1 | 0x10];
+    reg[p->r1 | 0x10] = reg[p->r1];
+    reg[p->r1] = temp;
 }
 
 void op_copy(struct opt* p) {
@@ -44308,7 +44298,7 @@ void op_jmp(struct opt* p) {
     if(p->skip) a = loadvarx(p->skip, a);
     if((reg[csrSTATUS] & p->b) || !(p->b)) {
         reg[csrPC] = a - p->skip;
-        reg[csrSTATUS] |= FLAG_MASK_J;
+        // reg[csrSTATUS] |= FLAG_MASK_J;
         /* if(verbosity & 2)
             fprintf(stderr, "jumped to 0x%llx because %llx includes %x\n", a, reg[csrSTATUS], p->b); */
     } /*else if(verbosity & 2)
@@ -44321,7 +44311,7 @@ void op_jn(struct opt* p) {
     if(p->skip) a = loadvarx(p->skip, a);
     if(((reg[csrSTATUS] & p->b) == 0) || !(p->b)) {
         reg[csrPC] = a - p->skip;
-        reg[csrSTATUS] |= FLAG_MASK_J;
+        // reg[csrSTATUS] |= FLAG_MASK_J;
         /*if(verbosity & 2)
             fprintf(stderr, "jumped to 0x%llx\n", a);*/
     } /*else if(verbosity & 2)
@@ -44382,7 +44372,7 @@ void op_call(struct opt* p) {
 void op_load_ia(struct opt* p) {
     regt a = reg[p->r1];
     regt adjust = loadvar(p->skip, reg[csrPC]);
-    if(verbosity & 2) printf("op_load_ia(): from 0x%llx\n", a + adjust);
+    if(verbosity & 2) printf("op_load_ia(): from 0x%llx+%llx\n", a, adjust);
     reg[p->r0] = loadvar(p->w, a + adjust);
 	if(verbosity & 2) printf("op_load_ia(): register #%d <- %llx\n", p->r0, reg[p->r0]);
 }

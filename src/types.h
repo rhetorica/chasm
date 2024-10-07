@@ -5,7 +5,7 @@
     #include <stdint.h>
     
     #define octet uint_least8_t
-    #define memt uint_fast16_t
+    #define memt uint_least16_t
     #define dwordt uint_fast32_t
     #define regt uint_fast64_t
     #define sregt int_fast64_t

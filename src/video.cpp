@@ -1,4 +1,5 @@
 #include <SDL3/SDL.h>
+#include <unistd.h>
 
 #include "types.h"
 #include "video.h"
@@ -17,6 +18,15 @@ SDL_Texture* ChasmTexture2;
 
 Uint32 EVENT_NEW_FRAME;
 regt real_offset;
+
+SDL_PixelFormat pixel_formats[] = {
+    SDL_PIXELFORMAT_UNKNOWN,
+    SDL_PIXELFORMAT_UNKNOWN,
+    SDL_PIXELFORMAT_UNKNOWN,
+    SDL_PIXELFORMAT_BGRA4444,
+    SDL_PIXELFORMAT_BGR24,
+    SDL_PIXELFORMAT_BGRX32,
+};
 
 void video_call(memt device_number, regt* reg) {
     switch(reg[csrH]) {
@@ -40,13 +50,16 @@ void video_call(memt device_number, regt* reg) {
 
             // the blackest hell of bad ideas:
             real_offset = (((regt)video_memory) + vmem_offset);
-
+            octet format_constant = video_memory[7];
+            if(format_constant > 5)
+                format_constant = 5;
+            
             SDL_Event event;
 
             event.type = EVENT_NEW_FRAME;
             event.user.code = EVENT_NEW_FRAME;
             event.user.data1 = &real_offset;
-            event.user.data2 = 0;
+            event.user.data2 = &(pixel_formats[format_constant]);
             SDL_PushEvent(&event);
             break;
         }
@@ -183,13 +196,18 @@ int video(void *p) {
             break;
         } else if(event.type == EVENT_NEW_FRAME) {
             if(event.user.code == EVENT_NEW_FRAME) {
-                SDL_SetRenderDrawColor(ChasmRenderer, 0x00, 0x00, 0x00, 0x00);
-                SDL_RenderClear(ChasmRenderer);
+                // SDL_SetRenderDrawColor(ChasmRenderer, 0x00, 0x00, 0x00, 0x00);
+                // SDL_RenderClear(ChasmRenderer);
                 void* pixels;
-                int pitch;
+                int pitch = SCREEN_WIDTH * 4;
+
+                SDL_PixelFormat src_format = *((SDL_PixelFormat*)event.user.data2);
+                SDL_PixelFormat dst_format = (SDL_PixelFormat)SDL_GetNumberProperty(SDL_GetTextureProperties(ChasmTexture), SDL_PROP_TEXTURE_FORMAT_NUMBER, 0);
+
                 if(SDL_LockTexture(ChasmTexture, NULL, (void**)&pixels, &pitch)) {
                 // *pixels = (void*)real_offset;
-                    memcpy(pixels, (void*)real_offset, SCREEN_HEIGHT * pitch);
+                    // memcpy(pixels, (void*)real_offset, SCREEN_HEIGHT * pitch);
+                    SDL_ConvertPixels(SCREEN_WIDTH, SCREEN_HEIGHT, src_format, (void*)real_offset, pitch, dst_format, pixels, pitch);
                     SDL_UnlockTexture(ChasmTexture);
                 } else {
                     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't lock texture: %s", SDL_GetError());
@@ -224,12 +242,18 @@ int video(void *p) {
         }
     }
 
+    int i = 2000;
+    while(i--)
+        reg[csrSTATUS] |= FLAG_MASK_H;
+    
     // SDL_DestroyProperties(ChasmTextureProperties);
     SDL_DestroyTexture(ChasmTexture);
     SDL_DestroyRenderer(ChasmRenderer);
     // SDL_DestroySurface(ChasmSurface);
     SDL_DestroyWindow(ChasmWindow);
     
+    usleep(100000);
+
     SDL_Quit();
 
     exit(0);

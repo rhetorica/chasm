@@ -21,11 +21,10 @@ regt PAGE_FAULT_ADDRESS;
 regt PAGE_FAULT_POINTER;
 regt PAGE_FAULT_ENTRY;
 
-
 octet* sysmem;
 
 void init_memory() {
-    sysmem = (octet*)calloc(MEM_COUNT * sizeof(memt), sizeof(octet));
+    sysmem = (octet*)malloc_aligned(MEM_COUNT * sizeof(memt));
 }
 
 void dump_memory(regt offset, regt length) {
@@ -43,7 +42,6 @@ void dump_memory(regt offset, regt length) {
     }
     fprintf(stderr, "\n");
 }
-
 
 #define PAGE_TABLE_ENTRY_SIZE 4
 

@@ -41,6 +41,10 @@ add_definitions(-DSDL_MAIN_HANDLED)
 
 include_directories(${SDL3_INCLUDE_DIRS})
 
+check_symbol_exists(posix_memalign "stdlib.h" HAVE_POSIX_MEMALIGN)
+check_symbol_exists(aligned_alloc "stdlib.h" HAVE_ALIGNED_ALLOC)
+check_symbol_exists(_aligned_malloc "stdlib.h" HAVE__ALIGNED_MALLOC)
+
 #set(WIN32_MODE 1)
 
 if(WIN32_MODE)

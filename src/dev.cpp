@@ -165,14 +165,14 @@ void create_device_table() {
 
     // 6. Atharti video display (active):
     if(video_enabled) {
-        mem_bank[dnum] = (octet*)calloc((VIDEO_MEM_SIZE), sizeof(octet));
+        mem_bank[dnum] = (octet*)malloc_aligned(VIDEO_MEM_SIZE);
         
         mem_bank[dnum][0] = 0x3c;
         mem_bank[dnum][1] = 0x00;
         *(reinterpret_cast<memt*>(&mem_bank[dnum][2])) = reg_to_mem16(SCREEN_WIDTH);
         *(reinterpret_cast<memt*>(&mem_bank[dnum][4])) = reg_to_mem16(SCREEN_HEIGHT);
         mem_bank[dnum][6] = 0x00;
-        mem_bank[dnum][7] = 0x05;
+        mem_bank[dnum][7] = 0x05; // 0x03 for 16-bit, 0x05 for 32-bit
         *(reinterpret_cast<regt*>(&mem_bank[dnum][8])) = reg_to_mem64(VIDEO_MEM_DEFAULT_FRAME_START);
 
         VIDEO_MEM_OFFSET = (regt)dnum << 40;
