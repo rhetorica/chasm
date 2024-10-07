@@ -5,8 +5,12 @@
 
 struct opt;
 
-typedef void opfunc(
-    struct opt* params
+#define OPTYPE dwordt __fastcall
+#define OPPARAM memt
+
+typedef OPTYPE opfunc(
+    // struct opt* params
+    OPPARAM p
 );
 
 struct opt {
@@ -15,7 +19,15 @@ struct opt {
 // attribs: [6 unused][1 bit vp][1 bit ap]
 
 extern struct opt oplist[];
-extern struct opt opspace[65536];
+//extern struct opt opspace[65536];
+extern opfunc* opspace[65536];
+
+#define GET_S ((p & 0xf0) >> 4)
+#define GET_R ((p & 0xf))
+#define GET_T ((p & 0xf00) >> 8)
+#define GET_AS ((p & 0x38) >> 3)
+#define GET_AR ((p & 0x07))
+#define GET_AT ((p & 0x1c0) >> 6)
 
 void build_opspace();
 extern int oplist_last;

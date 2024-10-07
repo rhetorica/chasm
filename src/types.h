@@ -1,6 +1,8 @@
 #ifndef TYPES_H
 #define TYPES_H
 
+    // #define VERBOSITY_MODE
+
     #include <bit>
     #include <stdint.h>
     

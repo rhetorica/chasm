@@ -372,7 +372,8 @@ static __forceinline void execute() {
     */
     //if(ins && 0)
     
-    struct opt* op = &opspace[ins];
+    // struct opt* op = &opspace[ins];
+    opfunc* impl = opspace[ins];
     /*octet* pt = (octet*)op; // don't try this at home
     if constexpr (std::endian::native == std::endian::little) {
         ins_traits.r0 = pt[11];
@@ -396,7 +397,7 @@ static __forceinline void execute() {
     
     #ifdef VERBOSITY_MODE
     if(verbosity >= 3) {
-        fprintf(stderr, "\t@%016llx = 0x%016llx %04x %02x %02x %02x %02x %02x %02x %02x\n", reg[csrPC] - 1, op->impl, op->op, op->r0, op->r1, op->r2, op->b, op->w, op->skip, op->attribs);
+        fprintf(stderr, "\t@%016llx = 0x%016llx %04x\n", reg[csrPC] - 1, impl, ins);
         /*fprintf(stderr, "\tunpacked = %02x %02x %02x %02x %02x %02x %02x %02x",
          ins_traits.r0, ins_traits.r1, ins_traits.r2, ins_traits.b,
          ins_traits.vp, ins_traits.ap, ins_traits.skip, ins_traits.w
@@ -406,8 +407,9 @@ static __forceinline void execute() {
     }
     #endif
     
-    (*(op->impl))(op);
-    reg[csrPC] += op->skip;
+    // (*(op->impl))(op);
+    regt result = (*(impl))(ins);
+    reg[csrPC] += result;
     /* last_pointer += op->skip;
     last_PC += op->skip; */
 }

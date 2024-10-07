@@ -43932,18 +43932,20 @@ struct opt oplist[] = {
 	{0xee3f, &op_strcmp,	  7,   7, 255, 0xff, 0x01, 0x00, 0x04}, // strcmp h h  
 };
 int oplist_last = 0xee3f;
-struct opt opspace[65536];
+// struct opt opspace[65536];
+opfunc* opspace[65536];
 
 // 0, 1, 2, 3, 4 words:
 regt word_size_masks[] = {0xffffffffffffffff, 0xffff, 0xffffffff, 0x0, 0xffffffffffffffff};
 
 struct opt illegal = {0x0000, &op_illegal, 0, 0, 255, 0xff, 0x00, 0x00, 0x00};
 
-void op_illegal(struct opt* p) {
+OPTYPE op_illegal(OPPARAM p) {
 	// unimplemented((memt)(r0 << 8) | (memt)r1);
-    fprintf(stderr, "Illegal operation: %02x%02x - no opcode matches at PC=0x%016llx\n", p->r0, p->r1, reg[csrPC]);
+    fprintf(stderr, "Illegal operation: %04x - no opcode matches at PC=0x%016llx\n", p, reg[csrPC]);
     dump_memory((reg[csrPC] - 1) & ~0xff, 0x100);
     exit(1);
+    return 0;
 }
 
 void build_opspace() {
@@ -43951,73 +43953,104 @@ void build_opspace() {
     // opspace = (struct opt*)malloc_aligned(0x10000 * sizeof(struct opt));
     int i = 65536;
     while(i--) {
-        opspace[i] = illegal;
-        opspace[i].r0 = i >> 8;
-        opspace[i].r1 = i & 0xff;
+        opspace[i] = &op_illegal;
+        // opspace[i].r0 = i >> 8;
+        // opspace[i].r1 = i & 0xff;
     }
     i = 0;
     struct opt* o = &(oplist[i]);
-    opspace[i] = *o;
+    opspace[i] = o->impl;
     do {
         o = &(oplist[++i]);
         regt op = o->op;
-        opspace[op] = *o;
+        opspace[op] = o->impl;
     } while (o->op != oplist_last);
     fprintf(stderr, " -- mapped %u ops\n", i);
     fprintf(stderr, " -- filled blanks\n");
 }
 
-void op_null(struct opt* p) {
-	// if(verbosity & 2) printf("op_null()\n");
+OPTYPE op_null(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_null()\n");
+	#endif
+    return 0;
 }
 
-void op_push(struct opt* p) {
-	// if(verbosity & 2) printf("op_push()\n");
-    regt a = reg[p->r0];
-    if(p->skip) a = loadvarx(p->skip, a);
-    if(p->w == 4)
+OPTYPE op_push(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_push()\n");
+	#endif
+    memt r = GET_R;
+    regt a;
+    memt w = GET_S;
+    dwordt skip = 0;
+    if(r == 0xf) {
+        a = loadvarx(skip = w, reg[csrPC]);
+    } else {
+        a = reg[r];
+    }
+    if(w == 4)
         push64(a);
-    else if(p->w == 2)
+    else if(w == 2)
         push32(a);
     else
         push16(a);
+    return skip;
 }
 
-void op_pop(struct opt* p) {
-	// if(verbosity & 2) printf("op_pop()\n");
-    if(p->w == 4)
-        reg[p->r0] = pop64();
-    else if(p->w == 2)
-        reg[p->r0] = pop32();
+OPTYPE op_pop(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_pop()\n");
+	#endif
+    memt r = GET_R;
+    memt w = GET_S;
+    if(w == 4)
+        reg[r] = pop64();
+    else if(w == 2)
+        reg[r] = pop32();
     else
-        reg[p->r0] = pop16();
+        reg[r] = pop16();
+    return 0;
 }
 
-void op_push_a(struct opt* p) {
-	// if(verbosity & 2) printf("op_push_a()\n");
+OPTYPE op_push_a(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_push_a()\n");
+	#endif
     push_all_special();
     push_all_data();
+    return 0;
 }
 
-void op_pop_a(struct opt* p) {
-	// if(verbosity & 2) printf("op_pop_a()\n");
+OPTYPE op_pop_a(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_pop_a()\n");
+	#endif
     pop_all_data();
     pop_all_special();
+    return 0;
 }
 
-void op_push_h(struct opt* p) {
-	// if(verbosity & 2) printf("op_push_h()\n");
+OPTYPE op_push_h(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_push_h()\n");
+	#endif
     push_all_data();
+    return 0;
 }
 
-void op_pop_h(struct opt* p) {
-	// if(verbosity & 2) printf("op_pop_h()\n");
+OPTYPE op_pop_h(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_pop_h()\n");
+	#endif
     pop_all_data();
+    return 0;
 }
 
-void op_rev(struct opt* p) {
-    octet mode = p->b;
-    regt in = reg[p->r0];
+OPTYPE op_rev(OPPARAM p) {
+    octet mode = GET_S;
+    memt r = GET_R;
+    regt in = reg[r];
     regt out = 0;
     if(mode == 0) { // reverse bit string
         int bi = 64;
@@ -44035,19 +44068,34 @@ void op_rev(struct opt* p) {
     } else if(mode == 5) { // swap32
         out = ((in & 0x00000000ffffffff) << 32) | ((in & 0xffffffff00000000) >> 32);
     } else {
-        unimplemented(p->op);
+        unimplemented(p);
+        return 0;
     }
-    reg[p->r0] = out;
+    reg[r] = out;
+    return 0;
 }
 
-void op_load_a(struct opt* p) {
-	// if(verbosity & 2) printf("op_load_a()\n");
+OPTYPE op_load_a(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_load_a()\n");
+	#endif
+    unimplemented(p);
+    return 0;
 }
 
-void op_load_h(struct opt* p) {
-	// if(verbosity & 2) printf("op_load_h()\n");
-    regt a = reg[p->r0];
-    if(p->skip) a = loadvarx(p->skip, a);
+OPTYPE op_load_h(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_load_h()\n");
+	#endif
+    memt r = GET_R;
+    regt a;
+    memt w = GET_S;
+    dwordt skip = 0;
+    if(r == 0xf) {
+        a = loadvarx(skip = w, reg[csrPC]);
+    } else {
+        a = reg[r];
+    }
     reg[csrA] = loadv64(a);
     reg[csrB] = loadv64(a + 4);
     reg[csrC] = loadv64(a + 8);
@@ -44064,24 +44112,45 @@ void op_load_h(struct opt* p) {
     reg[csrFd] = loadv64(a + 52);
     reg[csrGd] = loadv64(a + 56);
     reg[csrHd] = loadv64(a + 60);
+    return skip;
 }
 
-void op_real(struct opt* p) {
-	// if(verbosity & 2) printf("op_real()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    reg[p->r0] = mem_to_flat(a);
+OPTYPE op_real(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_real()\n");
+	#endif
+    int si = GET_S;
+    regt a;
+    if(si == 0xf) {
+        a = loadv64x(reg[csrPC]);
+    } else {
+        a = reg[si];
+    }
+    reg[GET_R] = mem_to_flat(a);
+    return 0;
 }
 
-void op_unreal(struct opt* p) {
-	// if(verbosity & 2) printf("op_unreal()\n");
+OPTYPE op_unreal(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_unreal()\n");
+	#endif
     unimplemented(0x0000);
+    return 0;
 }
 
-void op_store_a(struct opt* p) {
-	// if(verbosity & 2) printf("op_store_a()\n");
-    regt a = reg[p->r0];
-    if(p->skip) a = loadvarx(p->skip, a);
+OPTYPE op_store_a(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_store_a()\n");
+	#endif
+    memt r = GET_R;
+    regt a;
+    memt w = GET_S;
+    dwordt skip = 0;
+    if(r == 0xf) {
+        a = loadvarx(skip = w, reg[csrPC]);
+    } else {
+        a = reg[r];
+    }
     storev64(a, reg[csrA]);
     storev64(a + 4, reg[csrB]);
     storev64(a + 8, reg[csrC]);
@@ -44098,7 +44167,7 @@ void op_store_a(struct opt* p) {
     storev64(a + 52, reg[csrFd]);
     storev64(a + 56, reg[csrGd]);
     storev64(a + 60, reg[csrHd]);
-    storev64(a + 64, reg[csrPC] + p->skip);
+    storev64(a + 64, reg[csrPC] + skip);
     storev64(a + 68, reg[csrRA]);
     storev64(a + 72, reg[csrSB]);
     storev64(a + 76, reg[csrSP]);
@@ -44106,12 +44175,22 @@ void op_store_a(struct opt* p) {
     storev64(a + 84, reg[csrCB]);
     storev64(a + 88, reg[csrPI]);
     storev64(a + 92, reg[csrSTATUS]);
+    return skip;
 }
 
-void op_store_h(struct opt* p) {
-	// if(verbosity & 2) printf("op_store_h()\n");
-    regt a = reg[p->r0];
-    if(p->skip) a = loadvarx(p->skip, a);
+OPTYPE op_store_h(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_store_h()\n");
+	#endif
+    memt r = GET_R;
+    regt a;
+    memt w = GET_S;
+    dwordt skip = 0;
+    if(r == 0xf) {
+        a = loadvarx(skip = w, reg[csrPC]);
+    } else {
+        a = reg[r];
+    }
     storev64(a, reg[csrA]);
     storev64(a + 4, reg[csrB]);
     storev64(a + 8, reg[csrC]);
@@ -44128,163 +44207,336 @@ void op_store_h(struct opt* p) {
     storev64(a + 52, reg[csrFd]);
     storev64(a + 56, reg[csrGd]);
     storev64(a + 60, reg[csrHd]);
+    return skip;
 }
 
-void op_cdr(struct opt* p) {
-	// if(verbosity & 2) printf("op_cdr()\n");
-    reg[p->r0] = reg[p->r1 | 0x10];
+OPTYPE op_cdr(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_cdr()\n");
+	#endif
+
+    reg[GET_R] = reg[GET_S | 0x10];
+    return 0;
 }
 
-void op_flip(struct opt* p) {
-	// if(verbosity & 2) printf("op_flip(%c)\n", p->r1 + 'A');
-    regt temp = reg[p->r1 | 0x10];
-    reg[p->r1 | 0x10] = reg[p->r1];
-    reg[p->r1] = temp;
+OPTYPE op_flip(OPPARAM p) {
+	memt s = GET_S;
+    #ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_flip(%c)\n", s + 'A');
+	#endif
+    regt temp = reg[s | 0x10];
+    reg[s | 0x10] = reg[s];
+    reg[s] = temp;
+    return 0;
 }
 
-void op_copy(struct opt* p) {
-	// if(verbosity & 2) printf("op_copy()\n");
-    reg[p->r0] = reg[p->r1];
+OPTYPE op_copy(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_copy()\n");
+	#endif
+    reg[GET_R] = reg[GET_S];
+    return 0;
 }
 
-void op_swap(struct opt* p) {
-	// if(verbosity & 2) printf("op_swap()\n");
-    regt temp = reg[p->r1];
-    reg[p->r1] = reg[p->r0];
-    reg[p->r0] = temp;
+OPTYPE op_swap(OPPARAM p) {
+    memt r = GET_R;
+    memt s = GET_S;
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_swap()\n");
+	#endif
+    regt temp = reg[s];
+    reg[s] = reg[r];
+    reg[r] = temp;
+    return 0;
 }
 
-void op_load(struct opt* p) {
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    // if(verbosity & 2) printf("op_load(): from 0x%llx\n", a);
-    reg[p->r0] = loadvar(p->w, a);
-	// if(verbosity & 2) printf("op_load(): register #%d <- %llx\n", p->r0, reg[p->r0]);
+OPTYPE op_load(OPPARAM p) {
+    memt r = GET_R;
+    regt a;
+    memt s = GET_S;
+    dwordt skip = 0;
+    memt w = GET_T;
+    if(w == 3) {
+        a = loadvarx(skip = 4, reg[csrPC]);
+        w = s;
+    } else {
+        a = reg[s];
+        w = 1 << w; // {0, 1, 2} -> {1, 2, 4}
+    }
+
+    #ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_load(): from 0x%llx\n", a);
+	#endif
+    reg[r] = loadvar(w, a);
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_load(): register #%d <- %llx\n", r, reg[r]);
+	#endif
+    return skip;
 }
 
-void op_set(struct opt* p) {
-	// if(verbosity & 2) printf("op_set()\n");
-    reg[p->r0] = loadvarx(p->skip, reg[csrPC]);
+OPTYPE op_set(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_set()\n");
+	#endif
+    dwordt skip = (p & 0x70) >> 4;
+    reg[GET_R] = loadvarx(skip, reg[csrPC]);
+    return skip;
 }
 
-void op_set_c(struct opt* p) {
-	// if(verbosity & 2) printf("op_set_c()\n");
-    reg[p->r0 | 0x10] = loadvarx(p->skip, reg[csrPC]);
+OPTYPE op_set_c(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_set_c()\n");
+	#endif
+    reg[GET_R | 0x10] = loadvarx(4, reg[csrPC]);
+    return 4;
 }
 
 // setcdr.i is an alias of set.c,
 // but setcdr itself is its own op,
 // used later
 
-void op_setcdr(struct opt* p) {
-	// if(verbosity & 2) printf("op_setcdr()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    reg[p->r0 | 0x10] = a;
-}
-
-void op_store(struct opt* p) {
-	regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    if(p->r0 == csrPC) {
-        storevar(p->w, reg[p->r0] + p->skip, a);
+OPTYPE op_setcdr(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_setcdr()\n");
+	#endif
+    dwordt s = GET_S;
+    regt a;
+    dwordt skip = 0;
+    if(s == 0xf) {
+        a = loadvarx(skip = 4, reg[csrPC]);
     } else {
-        storevar(p->w, reg[p->r0], a);
+        a = reg[s];
     }
-    // if(verbosity & 2) printf("op_store() %llx at 0x%016llx\n", reg[p->r0], a);
+    reg[GET_R | 0x10] = a;
+    return skip;
 }
 
-void op_load_c(struct opt* p) {
-	// if(verbosity & 2) printf("op_load_c()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    reg[p->r0 | 0x10] = loadvar(p->w, a);
+OPTYPE op_store(OPPARAM p) {
+    memt r = GET_R;
+    regt a;
+    memt wmask = (p & 0x0300) >> 8;
+    memt w;
+    memt s = GET_S;
+    dwordt skip = 0;
+    if(wmask == 3) {
+        a = loadvarx(skip = 4, reg[csrPC]);
+        w = s;
+    } else {
+        a = reg[s];
+        w = 1 << wmask;
+    }
+    storevar(w, reg[r], a);
+    #ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_store() reg %c <- %016llx\n", 'a' + r, a);
+	#endif
+    return skip;
 }
 
-void op_store_c(struct opt* p) {
-	// if(verbosity & 2) printf("op_store_c()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    storevar(p->w, reg[p->r0 | 0x10], a);
+OPTYPE op_load_c(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_load_c()\n");
+	#endif
+    memt r = GET_R;
+    regt a;
+    memt s = GET_S;
+    dwordt skip = 0;
+    if(s == 0xf) {
+        a = loadvarx(skip = 4, reg[csrPC]);
+    } else {
+        a = reg[s];
+    }
+    reg[r | 0x10] = loadvar(4, a);
+    return skip;
 }
 
-void op_load_co(struct opt* p) {
-	// if(verbosity & 2) printf("op_load_co()\n");
-    regt a = reg[p->r1 | 0x10];
-    if(p->skip) a = loadvarx(p->skip, a);
-    reg[p->r0] = loadvar(4, a);
-    reg[p->r0 | 0x10] = loadvar(4, a + 4);
+OPTYPE op_store_c(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_store_c()\n");
+	#endif
+    memt r = GET_R;
+    regt a;
+    memt s = GET_S;
+    dwordt skip = 0;
+    if(s == 0xf) {
+        a = loadv64x(reg[csrPC]);
+        skip = 4;
+    } else {
+        a = reg[s];
+    }
+    storev64(reg[r | 0x10], a);
+    return skip;
 }
 
-void op_store_co(struct opt* p) {
-	// if(verbosity & 2) printf("op_store_co()\n");
-    regt a = reg[p->r1 | 0x10];
-    if(p->skip) a = loadvarx(p->skip, a);
-    storevar(p->w, reg[p->r0], a);
-    storevar(p->w, reg[p->r0 | 0x10], a + 4);
+OPTYPE op_load_co(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+    if(verbosity & 2) printf("op_load_co()\n");
+    #endif
+    memt r = GET_R;
+    regt a;
+    memt s = GET_S;
+    dwordt skip = 0;
+    if(s == 0xf) {
+        a = loadv64x(reg[csrPC]);
+        skip = 4;
+    } else {
+        a = reg[s | 0x10];
+    }
+    reg[r] = loadv64(a);
+    reg[r | 0x10] = loadv64(a + 4);
+    return skip;
 }
 
-void op_load_o(struct opt* p) {
-	// if(verbosity & 2) printf("op_load_o()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    reg[p->r0] = loadvar(4, a);
-    reg[p->r0 | 0x10] = loadvar(4, a + 4);
+OPTYPE op_store_co(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_store_co()\n");
+	#endif
+    memt r = GET_R;
+    regt a;
+    memt s = GET_S;
+    dwordt skip = 0;
+    if(s == 0xf) {
+        a = loadv64x(reg[csrPC]);
+        skip = 4;
+    } else {
+        a = reg[s | 0x10];
+    }
+    
+    storev64(reg[r], a);
+    storev64(reg[r | 0x10], a + 4);
+    return skip;
 }
 
-void op_store_o(struct opt* p) {
-	// if(verbosity & 2) printf("op_store_o()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    storevar(p->w, reg[p->r0], a);
-    storevar(p->w, reg[p->r0 | 0x10], a + 4);
+OPTYPE op_load_o(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_load_o()\n");
+	#endif
+    memt r = GET_R;
+    regt a;
+    memt s = GET_S;
+    dwordt skip = 0;
+    if(s == 0xf) {
+        a = loadv64x(reg[csrPC]);
+        skip = 4;
+    } else {
+        a = reg[s | 0x10];
+    }
+    reg[r] = loadv64(a);
+    reg[r | 0x10] = loadv64(a + 4);
+    return skip;
 }
 
-void op_disable(struct opt* p) {
-	// if(verbosity & 2) printf("op_disable()\n");
-    reg[p->r0] &= ~(1 << p->b);
+OPTYPE op_store_o(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_store_o()\n");
+	#endif
+    memt r = GET_R;
+    regt a;
+    memt s = GET_S;
+    dwordt skip = 0;
+    if(s == 0xf) {
+        a = loadv64x(reg[csrPC]);
+        skip = 4;
+    } else {
+        a = reg[s];
+    }
+    
+    storev64(reg[r], a);
+    storev64(reg[r | 0x10], a + 4);
+    return skip;
 }
 
-void op_enable(struct opt* p) {
-	// if(verbosity & 2) printf("op_enable()\n");
-    reg[p->r1] &= ~(1 << p->b);
+OPTYPE op_disable(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_disable()\n");
+	#endif
+    memt b = (p >> 4) & 0x3f;
+    reg[GET_R] &= ~(1 << b);
+    return 0;
 }
 
-void op_test(struct opt* p) {
-	// if(verbosity & 2) printf("op_test()\n");
-    regt result = ((1 << p->b) & reg[p->r0]);
+OPTYPE op_enable(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_enable()\n");
+	#endif
+    memt b = (p >> 4) & 0x3f;
+    reg[GET_R] |= (1 << b);
+    return 0;
+}
+
+OPTYPE op_test(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_test()\n");
+	#endif
+    memt b = (p >> 4) & 0x3f;
+    regt result = ((1 << b) & reg[GET_R]);
     reg[csrSTATUS] &= FLAG_MASK_Z | FLAG_MASK_E;
     if(result)
         reg[csrSTATUS] |= FLAG_MASK_E;
     else
         reg[csrSTATUS] |= FLAG_MASK_Z;
+    return 0;
 }
 
-void op_bcopy(struct opt* p) {
-	// if(verbosity & 2) printf("op_bcopy()\n");
-    regt c = reg[p->r2];
-    if(p->skip) c = loadvarx(p->skip, c);
-    regt b = reg[p->r1];
-    regt a = reg[p->r0];
+OPTYPE op_bcopy(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_bcopy()\n");
+	#endif
+    regt t = GET_T;
+    dwordt skip = 0;
+    regt c;
+    regt b = reg[GET_S];
+    regt a = reg[GET_R];
+    if(t == 0xf) {
+        skip = 4;
+        c = loadv64x(reg[csrPC]);
+    } else {
+        skip = 0;
+        c = reg[t];
+    }
     copy_block(a, b, c);
+    return skip;
 }
 
-void op_bfill(struct opt* p) {
-	// if(verbosity & 2) printf("op_bfill()\n");
-    regt c = reg[p->r2];
-    if(p->skip) c = loadvarx(p->skip, c);
-    regt b = reg[p->r1];
-    regt a = reg[p->r0];
+OPTYPE op_bfill(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_bfill()\n");
+	#endif
+    regt t = GET_T;
+    dwordt skip = 0;
+    regt c;
+    regt b = reg[GET_S];
+    regt a = reg[GET_R];
+    if(t == 0xf) {
+        skip = 4;
+        c = loadv64x(reg[csrPC]);
+    } else {
+        skip = 0;
+        c = reg[t];
+    }
     fill_block(a, b, c);
+    return 0;
 }
 
-void op_update(struct opt* p) {
-	// if(verbosity & 2) printf("op_update()\n");
-    regt c = reg[p->r2];
-    if(p->skip) c = loadvarx(p->skip, c);
-    regt a = reg[p->r0] = loadv64(reg[p->r1]);
+OPTYPE op_update(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_update()\n");
+	#endif
+    memt t = GET_T;
+    dwordt skip = 0;
+    regt c;
+    memt s = GET_S;
+    regt b = reg[GET_S];
+    regt a = reg[GET_R] = loadv64(b);
+    if(t == 0xf) {
+        skip = 4;
+        c = loadv64x(reg[csrPC]);
+    } else {
+        skip = 0;
+        c = reg[t];
+    }
+    
     if(a < c)
-        storev64(reg[p->r1], c);
+        storev64(reg[s], c);
     
     regt g_test = (c > a) << FLAG_G;
     regt e_test = (c == a) << FLAG_E;
@@ -44292,72 +44544,123 @@ void op_update(struct opt* p) {
     regt z_test = (c == 0) << FLAG_Z;
     reg[csrSTATUS] &= ~0xff;
     reg[csrSTATUS] |= g_test | e_test | l_test | z_test;
+    return skip;
 }
 
-void op_jmp(struct opt* p) {
-	// if(verbosity & 2) printf("op_jmp()\n");
-    regt a = reg[p->r0];
-    if(p->skip) a = loadvarx(p->skip, a);
-    if((reg[csrSTATUS] & p->b) || !(p->b)) {
-        reg[csrPC] = a - p->skip;
+OPTYPE op_jmp(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_jmp()\n");
+	#endif
+    memt r = GET_R;
+    regt a;
+    memt b = (p >> 4) & 0x3f;
+    dwordt skip = 0;
+    if(r == 0xf) {
+        a = loadv64x(reg[csrPC]);
+        skip = 4;
+    } else {
+        a = reg[r];
+    }
+    
+    if((reg[csrSTATUS] & b) || !b) {
+        reg[csrPC] = a;
+        return 0; // no skip
         // reg[csrSTATUS] |= FLAG_MASK_J;
         /* if(verbosity & 2)
-            fprintf(stderr, "jumped to 0x%llx because %llx includes %x\n", a, reg[csrSTATUS], p->b); */
+            fprintf(stderr, "jumped to 0x%llx because %llx includes %x\n", a, reg[csrSTATUS], b); */
     } /*else if(verbosity & 2)
         fprintf(stderr, "did not jump to 0x%llx\n", a);*/
+    return skip;
 }
 
-void op_jn(struct opt* p) {
-	// if(verbosity & 2) printf("op_jn()\n");
-    regt a = reg[p->r0];
-    if(p->skip) a = loadvarx(p->skip, a);
-    if(((reg[csrSTATUS] & p->b) == 0) || !(p->b)) {
-        reg[csrPC] = a - p->skip;
+OPTYPE op_jn(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_jn()\n");
+	#endif
+    memt r = GET_R;
+    regt a;
+    memt b = (p >> 4) & 0x3f;
+    dwordt skip = 0;
+    if(r == 0xf) {
+        a = loadv64x(reg[csrPC]);
+        skip = 4;
+    } else {
+        a = reg[r];
+    }
+
+    if(((reg[csrSTATUS] & b) == 0) || !b) {
+        reg[csrPC] = a;
+        return 0;
         // reg[csrSTATUS] |= FLAG_MASK_J;
         /*if(verbosity & 2)
             fprintf(stderr, "jumped to 0x%llx\n", a);*/
     } /*else if(verbosity & 2)
         fprintf(stderr, "did not jump to 0x%llx\n", a);*/
+    return skip;
 }
 
-void op_rep(struct opt* p) {
-	// if(verbosity & 2) printf("op_rep()\n");
+OPTYPE op_rep(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_rep()\n");
+	#endif
     unimplemented(0x0000);
+    return 0;
 }
 
-void op_int(struct opt* p) {
-	// if(verbosity & 2) printf("op_int()\n");
-    call_interrupt(p->b, false);
+OPTYPE op_int(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_int()\n");
+	#endif
+    call_interrupt(p & 0xff, false);
+    return 0;
 }
 
-void op_syscall(struct opt* p) {
-	// if(verbosity & 2) printf("op_syscall()\n");
+OPTYPE op_syscall(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_syscall()\n");
+	#endif
     reg[csrSTATUS] |= FLAG_MASK_RM2;
-    call_interrupt(p->b, false);
+    call_interrupt(p & 0xff, false);
+    return 0;
 }
 
-void op_iret(struct opt* p) {
-	// if(verbosity & 2) printf("op_iret()\n");
+OPTYPE op_iret(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_iret()\n");
+	#endif
     interrupt_return();
     reg[csrSTATUS] &= ~FLAG_MASK_RM2;
+    return 0;
 }
 
-void op_lmmt(struct opt* p) {
-	// if(verbosity & 2) printf("op_lmmt()\n");
-    MMT_POINTER = reg[p->r0];
+OPTYPE op_lmmt(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_lmmt()\n");
+	#endif
+    MMT_POINTER = reg[GET_R];
+    return 0;
 }
 
-void op_ret(struct opt* p) {
-	// if(verbosity & 2) printf("op_ret()\n");
+OPTYPE op_ret(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_ret()\n");
+	#endif
     reg[csrPC] = pop64();
     reg[csrSB] = pop64();
     reg[csrSP] = pop64();
-    reg[csrSTATUS] |= FLAG_MASK_J;
+    return 0;
 }
 
-void op_call(struct opt* p) {
-    regt dest = reg[p->r0];
-    if(p->skip) dest = loadvarx(p->skip, dest);
+OPTYPE op_call(OPPARAM p) {
+    memt r = GET_R;
+    dwordt skip;
+    regt dest;
+    if(r == 0xf) {
+        dest = loadv64x(reg[csrPC]);
+        skip = 4;
+    } else {
+        reg[r];
+    }
     if(verbosity & 2) {
 	    printf("op_call()\n");
         fprintf(stderr, " -- calling PC=0x%0llx\n", dest);
@@ -44365,159 +44668,231 @@ void op_call(struct opt* p) {
     }
     push64(reg[csrSP]);
     push64(reg[csrSB]);
-    push64(reg[csrPC] + p->skip);
+    push64(reg[csrPC] + skip);
     reg[csrSB] = reg[csrSP];
-    reg[csrPC] = dest - p->skip;
-    reg[csrSTATUS] |= FLAG_MASK_J;
+    reg[csrPC] = dest;
+    return 0; // no skip sent to executive, since we always succeed
 }
 
-void op_load_ia(struct opt* p) {
-    regt a = reg[p->r1];
-    regt adjust = loadvar(p->skip, reg[csrPC]);
+OPTYPE op_load_ia(OPPARAM p) {
+    regt a = reg[GET_S];
+    regt adjust = loadv64x(reg[csrPC]);
     if(verbosity & 2) printf("op_load_ia(): from 0x%llx+%llx\n", a, adjust);
-    reg[p->r0] = loadvar(p->w, a + adjust);
-	if(verbosity & 2) printf("op_load_ia(): register #%d <- %llx\n", p->r0, reg[p->r0]);
+    octet width = 1 << (((p >> 8) & 3) - 1); // {1,2,3} -> {0,1,2} -> {1,2,4}
+    reg[GET_R] = loadvar(width, a + adjust);
+	if(verbosity & 2) printf("op_load_ia(): register #%d <- %llx\n", GET_R, reg[GET_R]);
+    return 4;
 }
 
-void op_store_ia(struct opt* p) {
-	regt a = reg[p->r1];
-    regt adjust = loadvar(p->skip, reg[csrPC]);
-    storevar(p->w, reg[p->r0], a + adjust);
+OPTYPE op_store_ia(OPPARAM p) {
+	regt a = reg[GET_S];
+    regt adjust = loadv64x(reg[csrPC]);
+    octet width = 1 << (((p >> 8) & 3) - 1); // {1,2,3} -> {0,1,2} -> {1,2,4}
+    storevar(width, reg[GET_R], a + adjust);
+    return 4;
 }
 
-void op_cout(struct opt* p) {
-	// if(verbosity & 2) printf("op_cout()\n");
-    fprintf(stdout, "%c", p->b);
+OPTYPE op_cout(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_cout()\n");
+	#endif
+    fprintf(stdout, "%c", p & 0xff);
+    return 0;
 }
 
-void op_creg(struct opt* p) {
-	// if(verbosity & 2) printf("op_creg()\n");
-    fprintf(stdout, "%llu", reg[p->r0]);
+OPTYPE op_creg(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_creg()\n");
+	#endif
+    fprintf(stdout, "%llu", reg[GET_R]);
+    return 0;
 }
 
-void op_cregx(struct opt* p) {
-	// if(verbosity & 2) printf("op_cregx()\n");
-    fprintf(stdout, "%016llx", reg[p->r0]);
+OPTYPE op_cregx(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_cregx()\n");
+	#endif
+    fprintf(stdout, "%016llx", reg[GET_R]);
+    return 0;
 }
 
-void op_crega(struct opt* p) {
-	// if(verbosity & 2) printf("op_crega()\n");
-    octet c = reg[p->r0] & 0xff;
+OPTYPE op_crega(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_crega()\n");
+	#endif
+    octet c = reg[GET_R] & 0xff;
     fprintf(stdout, "%c", c);
+    return 0;
 }
 
-void op_cregf(struct opt* p) {
-	// if(verbosity & 2) printf("op_cregf()\n");
-    fprintf(stdout, "%f", *reinterpret_cast<double*>(&reg[p->r0]));
+OPTYPE op_cregf(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_cregf()\n");
+	#endif
+    fprintf(stdout, "%f", *reinterpret_cast<double*>(&reg[GET_R]));
+    return 0;
 }
 
-void op_cin(struct opt* p) {
-	// if(verbosity & 2) printf("op_cin()\n");
+OPTYPE op_cin(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_cin()\n");
+	#endif
     char* buffer = (char*)calloc(32, sizeof(char));
     fgets(buffer, 31, stdin);
-    reg[p->r0] = strtoll(buffer, NULL, 0);
+    reg[GET_R] = strtoll(buffer, NULL, 0);
     free(buffer);
+    return 0;
 }
 
-void op_cinx(struct opt* p) {
-	// if(verbosity & 2) printf("op_cinx()\n");
+OPTYPE op_cinx(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_cinx()\n");
+	#endif
     char* buffer = (char*)calloc(32, sizeof(char));
     fgets(buffer, 31, stdin);
-    reg[p->r0] = strtoll(buffer, NULL, 16);
+    reg[GET_R] = strtoll(buffer, NULL, 16);
     free(buffer);
+    return 0;
 }
 
-void op_cina(struct opt* p) {
-	// if(verbosity & 2) printf("op_cina()\n");
-    reg[p->r0] = getchar();
+OPTYPE op_cina(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_cina()\n");
+	#endif
+    reg[GET_R] = getchar();
+    return 0;
 }
 
-void op_mod(struct opt* p) {
-	// if(verbosity & 2) printf("op_mod()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
+// i hope there isn't a hell for this:
+#define LOAD_ARITHMETIC_ARGS() \
+    \
+        int ri = GET_AR; \
+        regt r = reg[ri]; \
+        bool ref_flag = (p & 0x100) && true; \
+        octet size_code = 1 << ((p & 0xc0) >> 6); /* {00, 40, 80, c0} -> {1, 2, 4, 8} */ \
+        dwordt skip = 0; \
+        regt s; \
+        \
+        if(size_code == 8) { \
+            size_code = GET_AS; \
+            if(ref_flag) { \
+                s = loadv64x(reg[csrPC]); \
+                s = loadvar(size_code, s); \
+                skip = 4; \
+            } else { \
+                s = loadvarx(size_code, reg[csrPC]); \
+                skip = size_code; \
+            } \
+        } else if(ref_flag) { \
+            s = loadvar(size_code, reg[GET_AS]); \
+        } else { \
+            s = reg[GET_AS]; \
+        }
 
-    reg[p->r0] = reg[p->r0] % a;
-    reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | ((a == 0) << FLAG_C);
+OPTYPE op_mod(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_mod()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
+    regt v = r % s;
+
+    reg[ri] = v;
+    reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | ((s == 0) << FLAG_C);
+    return skip;
 }
 
-void op_add(struct opt* p) {
-	regt b = reg[p->r0];
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
+OPTYPE op_add(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_add()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
 
-    reg[p->r0] = reg[p->r0] + a;
-    reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((reg[p->r0] - a) != b) << FLAG_C);
-    // if(verbosity & 2) printf("op_add(): %c <- %llu + %llu | status <- %llx\n", p->r0 + 'a', b, a, reg[csrSTATUS]);
+    regt v = r + s;
+
+    reg[ri] = v;
+    reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((v - s) != r) << FLAG_C);
+    #ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_add(): %c <- %llu + %llu | status <- %llx\n", ri + 'a', r, s, reg[csrSTATUS]);
+	#endif
+    return skip;
 }
 
-void op_lsh(struct opt* p) {
-	// if(verbosity & 2) printf("op_lsh()\n");
-    regt b = reg[p->r0];
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
+OPTYPE op_lsh(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_lsh()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
+    regt v = r << s;
     
-    reg[p->r0] = reg[p->r0] << a;
-    reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((reg[p->r0] >> a) != b) << FLAG_C);
+    reg[ri] = v;
+    reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((v >> s) != r) << FLAG_C);
+    return skip;
 }
 
-void op_sub(struct opt* p) {
-	// if(verbosity & 2) printf("op_sub()\n");
-    regt b = reg[p->r0];
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
+OPTYPE op_sub(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_sub()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
     
-    reg[p->r0] = reg[p->r0] - a;
-    reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((reg[p->r0] + a) != b) << FLAG_C);
-}
-
-void op_mul(struct opt* p) {
-	// if(verbosity & 2) printf("op_mul()\n");
-    regt b = reg[p->r0];
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
+    regt v = r - s;
     
-    reg[p->r0] = reg[p->r0] * a;
-    reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((reg[p->r0] / a) != b) << FLAG_C);
+    reg[ri] = v;
+    reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((v + s) != r) << FLAG_C);
+    return skip;
 }
 
-void op_rsh(struct opt* p) {
-	// if(verbosity & 2) printf("op_rsh()\n");
-    regt b = reg[p->r0];
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
+OPTYPE op_mul(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_mul()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
     
-    reg[p->r0] = reg[p->r0] >> a;
-    reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((reg[p->r0] << a) != b) << FLAG_C);
+    regt v = r * s;
+
+    reg[ri] = v;
+    reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((v / s) != r) << FLAG_C);
+    return skip;
 }
 
-void op_div(struct opt* p) {
-	// if(verbosity & 2) printf("op_div()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
+OPTYPE op_rsh(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_rsh()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
     
-    reg[p->r0] = reg[p->r0] / a;
-    reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | ((a == 0) << FLAG_C);
+    regt v = r >> s;
+
+    reg[ri] = v;
+    reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((v << s) != r) << FLAG_C);
+    return skip;
 }
 
-void op_cmp(struct opt* p) {
-	// if(verbosity & 2) printf("op_cmp()\n");
-    regt b = reg[p->r0];
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
+OPTYPE op_div(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_div()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+    
+    regt v = r / s;
 
-    regt g_test = (b > a) << FLAG_G;
-    regt e_test = (b == a) << FLAG_E;
-    regt l_test = (b < a) << FLAG_L;
-    regt z_test = (b == 0) << FLAG_Z;
+    reg[ri] = v;
+    reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | ((s == 0) << FLAG_C);
+    return skip;
+}
+
+OPTYPE op_cmp(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_cmp()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
+    regt g_test = (r > s) << FLAG_G;
+    regt e_test = (r == s) << FLAG_E;
+    regt l_test = (r < s) << FLAG_L;
+    regt z_test = (r == 0) << FLAG_Z;
     /*
     if(verbosity & 2) {
         printf(" -- cmp(%llu, %llu)\n", b, a);
@@ -44534,106 +44909,122 @@ void op_cmp(struct opt* p) {
     if(verbosity & 2) {
         printf(" STATUS after: %llx\n", reg[csrSTATUS]);
     } */
+    return skip;
 }
 
-void op_smod(struct opt* p) {
-	// if(verbosity & 2) printf("op_mod()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    sregt b = *reinterpret_cast<sregt*>(&reg[p->r0]);
-    sregt c = *reinterpret_cast<sregt*>(&a);
+OPTYPE op_smod(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_mod()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
+    sregt b = *reinterpret_cast<sregt*>(&r);
+    sregt c = *reinterpret_cast<sregt*>(&s);
     sregt d = b % c;
 
-    reg[p->r0] = *reinterpret_cast<regt*>(&d);
+    reg[ri] = *reinterpret_cast<regt*>(&d);
     reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | ((c == 0) << FLAG_C);
+    return skip;
 }
 
-void op_sadd(struct opt* p) {
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    sregt b = *reinterpret_cast<sregt*>(&reg[p->r0]);
-    sregt c = *reinterpret_cast<sregt*>(&a);
+OPTYPE op_sadd(OPPARAM p) {
+    LOAD_ARITHMETIC_ARGS();
+
+    sregt b = *reinterpret_cast<sregt*>(&r);
+    sregt c = *reinterpret_cast<sregt*>(&s);
     sregt d = b + c;
 
-    reg[p->r0] = *reinterpret_cast<regt*>(&d);
+    reg[ri] = *reinterpret_cast<regt*>(&d);
     reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((d - c) != b) << FLAG_C);
-    // if(verbosity & 2) printf("op_add(): %c <- %llu + %llu | status <- %llx\n", p->r0 + 'a', b, a, reg[csrSTATUS]);
+    #ifdef VERBOSITY_MODE 
+    if(verbosity & 2) printf("op_sadd(): %c <- %llu + %llu | status <- %llx\n", ri + 'a', r, s, reg[csrSTATUS]);
+	#endif
+    return skip;
 }
 
-void op_slsh(struct opt* p) {
-	// if(verbosity & 2) printf("op_lsh()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    sregt b = *reinterpret_cast<sregt*>(&reg[p->r0]);
-    sregt c = *reinterpret_cast<sregt*>(&a);
+OPTYPE op_slsh(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_lsh()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
+    sregt b = *reinterpret_cast<sregt*>(&r);
+    sregt c = *reinterpret_cast<sregt*>(&s);
     sregt d = b << c;
 
-    reg[p->r0] = *reinterpret_cast<regt*>(&d);
+    reg[ri] = *reinterpret_cast<regt*>(&d);
     reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((d >> c) != b) << FLAG_C);
+    return skip;
 }
 
-void op_ssub(struct opt* p) {
-	// if(verbosity & 2) printf("op_sub()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    sregt b = *reinterpret_cast<sregt*>(&reg[p->r0]);
-    sregt c = *reinterpret_cast<sregt*>(&a);
+OPTYPE op_ssub(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_sub()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
+    sregt b = *reinterpret_cast<sregt*>(&r);
+    sregt c = *reinterpret_cast<sregt*>(&s);
     sregt d = b - c;
 
-    reg[p->r0] = *reinterpret_cast<regt*>(&d);
+    reg[ri] = *reinterpret_cast<regt*>(&d);
     reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((d + c) != b) << FLAG_C);
+    return skip;
 }
 
-void op_smul(struct opt* p) {
-	// if(verbosity & 2) printf("op_mul()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    sregt b = *reinterpret_cast<sregt*>(&reg[p->r0]);
-    sregt c = *reinterpret_cast<sregt*>(&a);
+OPTYPE op_smul(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_mul()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
+    sregt b = *reinterpret_cast<sregt*>(&r);
+    sregt c = *reinterpret_cast<sregt*>(&s);
     sregt d = b * c;
 
-    reg[p->r0] = *reinterpret_cast<regt*>(&d);
+    reg[ri] = *reinterpret_cast<regt*>(&d);
     reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((d / c) != b) << FLAG_C);
+    return skip;
 }
 
-void op_srsh(struct opt* p) {
-	// if(verbosity & 2) printf("op_rsh()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    sregt b = *reinterpret_cast<sregt*>(&reg[p->r0]);
-    sregt c = *reinterpret_cast<sregt*>(&a);
+OPTYPE op_srsh(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_rsh()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
+    sregt b = *reinterpret_cast<sregt*>(&r);
+    sregt c = *reinterpret_cast<sregt*>(&s);
     sregt d = b >> c;
 
-    reg[p->r0] = *reinterpret_cast<regt*>(&d);
+    reg[ri] = *reinterpret_cast<regt*>(&d);
     reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | (((d << c) != b) << FLAG_C);
+    return skip;
 }
 
-void op_sdiv(struct opt* p) {
-	// if(verbosity & 2) printf("op_div()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    sregt b = *reinterpret_cast<sregt*>(&reg[p->r0]);
-    sregt c = *reinterpret_cast<sregt*>(&a);
+OPTYPE op_sdiv(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_div()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
+    sregt b = *reinterpret_cast<sregt*>(&r);
+    sregt c = *reinterpret_cast<sregt*>(&s);
     sregt d = b / c;
 
-    reg[p->r0] = *reinterpret_cast<regt*>(&d);
+    reg[ri] = *reinterpret_cast<regt*>(&d);
     reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | ((c == 0) << FLAG_C);
+    return skip;
 }
 
-void op_scmp(struct opt* p) {
-	// if(verbosity & 2) printf("op_cmp()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    sregt b = *reinterpret_cast<sregt*>(&reg[p->r0]);
-    sregt c = *reinterpret_cast<sregt*>(&a);
+OPTYPE op_scmp(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_cmp()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
+    sregt b = *reinterpret_cast<sregt*>(&r);
+    sregt c = *reinterpret_cast<sregt*>(&s);
 
     regt g_test = (b > c) << FLAG_G;
     regt e_test = (b == c) << FLAG_E;
@@ -44656,118 +45047,157 @@ void op_scmp(struct opt* p) {
     if(verbosity & 2) {
         printf(" STATUS after: %llx\n", reg[csrSTATUS]);
     } */
+    return skip;
 }
 
-void op_bmod(struct opt* p) {
-	// if(verbosity & 2) printf("op_bmod()\n");
+OPTYPE op_bmod(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_bmod()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0x0000);
+    return skip;
 }
 
-void op_badd(struct opt* p) {
-	// if(verbosity & 2) printf("op_badd()\n");
+OPTYPE op_badd(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_badd()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0x0000);
+    return skip;
 }
 
-void op_bsub(struct opt* p) {
-	// if(verbosity & 2) printf("op_bsub()\n");
+OPTYPE op_bsub(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_bsub()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0x0000);
+    return skip;
 }
 
-void op_bmul(struct opt* p) {
-	// if(verbosity & 2) printf("op_bmul()\n");
+OPTYPE op_bmul(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_bmul()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0x0000);
+    return skip;
 }
 
-void op_bdiv(struct opt* p) {
-	// if(verbosity & 2) printf("op_bdiv()\n");
+OPTYPE op_bdiv(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_bdiv()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0x0000);
+    return skip;
 }
 
-void op_fadd(struct opt* p) {
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    double b = *reinterpret_cast<double*>(&reg[p->r0]);
-    double c = *reinterpret_cast<double*>(&a);
+OPTYPE op_fadd(OPPARAM p) {
+    LOAD_ARITHMETIC_ARGS();
+
+    double b = *reinterpret_cast<double*>(&r);
+    double c = *reinterpret_cast<double*>(&s);
     double d = b + c;
 
-    reg[p->r0] = *reinterpret_cast<regt*>(&d);
+    reg[ri] = *reinterpret_cast<regt*>(&d);
     reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | ((c == 0 || isnan(d) || isinf(d)) << FLAG_C);
-    // if(verbosity & 2) printf("op_add(): %c <- %llu + %llu | status <- %llx\n", p->r0 + 'a', b, a, reg[csrSTATUS]);
+    #ifdef VERBOSITY_MODE 
+    if(verbosity & 2) printf("op_fadd(): %c <- %llu + %llu | status <- %llx\n", ri + 'a', r, s, reg[csrSTATUS]);
+	#endif
+    return skip;
 }
 
-void op_fpow(struct opt* p) {
-	// if(verbosity & 2) printf("op_lsh()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    double b = *reinterpret_cast<double*>(&reg[p->r0]);
-    double c = *reinterpret_cast<double*>(&a);
+OPTYPE op_fpow(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_lsh()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+    
+    double b = *reinterpret_cast<double*>(&r);
+    double c = *reinterpret_cast<double*>(&s);
     double d = pow(b, c);
 
-    reg[p->r0] = *reinterpret_cast<regt*>(&d);
+    reg[ri] = *reinterpret_cast<regt*>(&d);
     reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | ((c == 0 || isnan(d) || isinf(d)) << FLAG_C);
+    return skip;
 }
 
-void op_fsub(struct opt* p) {
-	// if(verbosity & 2) printf("op_sub()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    double b = *reinterpret_cast<double*>(&reg[p->r0]);
-    double c = *reinterpret_cast<double*>(&a);
+OPTYPE op_fsub(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_sub()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+    
+    double b = *reinterpret_cast<double*>(&r);
+    double c = *reinterpret_cast<double*>(&s);
     double d = b - c;
 
-    reg[p->r0] = *reinterpret_cast<regt*>(&d);
+    reg[ri] = *reinterpret_cast<regt*>(&d);
     reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | ((c == 0 || isnan(d) || isinf(d)) << FLAG_C);
+    return skip;
 }
 
-void op_fmul(struct opt* p) {
-	// if(verbosity & 2) printf("op_mul()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    double b = *reinterpret_cast<double*>(&reg[p->r0]);
-    double c = *reinterpret_cast<double*>(&a);
+OPTYPE op_fmul(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_mul()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+    
+    double b = *reinterpret_cast<double*>(&r);
+    double c = *reinterpret_cast<double*>(&s);
     double d = b * c;
 
-    reg[p->r0] = *reinterpret_cast<regt*>(&d);
+    reg[ri] = *reinterpret_cast<regt*>(&d);
     reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | ((c == 0 || isnan(d) || isinf(d)) << FLAG_C);
+    return skip;
 }
 
-void op_flog(struct opt* p) {
-	// if(verbosity & 2) printf("op_rsh()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    double b = *reinterpret_cast<double*>(&reg[p->r0]);
-    double c = *reinterpret_cast<double*>(&a);
+OPTYPE op_flog(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_rsh()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+    
+    double b = *reinterpret_cast<double*>(&r);
+    double c = *reinterpret_cast<double*>(&s);
     double d = log(b) / log(c);
 
-    reg[p->r0] = *reinterpret_cast<regt*>(&d);
+    reg[ri] = *reinterpret_cast<regt*>(&d);
     reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | ((c == 0 || isnan(d) || isinf(d)) << FLAG_C);
+    return skip;
 }
 
-void op_fdiv(struct opt* p) {
-	// if(verbosity & 2) printf("op_div()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    double b = *reinterpret_cast<double*>(&reg[p->r0]);
-    double c = *reinterpret_cast<double*>(&a);
+OPTYPE op_fdiv(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_div()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+    
+    double b = *reinterpret_cast<double*>(&r);
+    double c = *reinterpret_cast<double*>(&s);
     double d = b / c;
 
-    reg[p->r0] = *reinterpret_cast<regt*>(&d);
+    reg[ri] = *reinterpret_cast<regt*>(&d);
     reg[csrSTATUS] = (reg[csrSTATUS] & ~FLAG_MASK_C) | ((c == 0 || isnan(d) || isinf(d)) << FLAG_C);
+    return skip;
 }
 
-void op_fcmp(struct opt* p) {
-	// if(verbosity & 2) printf("op_cmp()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvar(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    double b = *reinterpret_cast<double*>(&reg[p->r0]);
-    double c = *reinterpret_cast<double*>(&a);
+OPTYPE op_fcmp(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_cmp()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+    
+    double b = *reinterpret_cast<double*>(&r);
+    double c = *reinterpret_cast<double*>(&s);
 
     regt g_test = (b > c) << FLAG_G;
     regt e_test = (b == c) << FLAG_E;
@@ -44791,195 +45221,305 @@ void op_fcmp(struct opt* p) {
     if(verbosity & 2) {
         printf(" STATUS after: %llx\n", reg[csrSTATUS]);
     } */
+    return skip;
 }
 
-void op_not(struct opt* p) {
-	// if(verbosity & 2) printf("op_not()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    reg[p->r0] = ~a;
+OPTYPE op_not(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_not()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
+    reg[ri] = ~s;
+    return skip;
 }
 
-void op_xor(struct opt* p) {
-	// if(verbosity & 2) printf("op_xor()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    reg[p->r0] = reg[p->r0] ^ a;
+OPTYPE op_xor(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_xor()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+    reg[ri] = r ^ s;
+    return skip;
 }
 
-void op_ror(struct opt* p) {
-	// if(verbosity & 2) printf("op_ror()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    regt b = reg[p->r0];
+OPTYPE op_ror(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_ror()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
 
-    reg[p->r0] = (b >> a) | (b << (64 - a));
+    reg[ri] = (r >> s) | (r << (64 - s));
+    return skip;
 }
 
-void op_and(struct opt* p) {
-	// if(verbosity & 2) printf("op_and()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    reg[p->r0] &= a;
+OPTYPE op_and(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_and()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+    
+    reg[ri] &= s;
+    return skip;
 }
 
-void op_or(struct opt* p) {
-	// if(verbosity & 2) printf("op_or()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    reg[p->r0] |= a;
+OPTYPE op_or(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_or()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
+    reg[ri] |= s;
+    return skip;
 }
 
-void op_rol(struct opt* p) {
-	// if(verbosity & 2) printf("op_rol()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
-    regt b = reg[p->r0];
+OPTYPE op_rol(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_rol()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
 
-    reg[p->r0] = (b << a) | (b >> (64 - a));
+    reg[ri] = (r << s) | (r >> (64 - s));
+    return skip;
 }
 
-void op_popcount(struct opt* p) {
-	// if(verbosity & 2) printf("op_popcount()\n");
-    regt a = reg[p->r1];
-    if(p->skip) a = loadvarx(p->skip, a);
-    if(p->attribs & 1) a = loadvar(p->w, a);
+OPTYPE op_popcount(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_popcount()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
 
-    reg[p->r0] = __builtin_popcountll(a);
+    reg[ri] = __builtin_popcountll(s);
+    return skip;
 }
 
-void op_cadd(struct opt* p) {
-	// if(verbosity & 2) printf("op_cadd()\n");
+OPTYPE op_cadd(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_cadd()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xd200);
+    return skip;
 }
 
-void op_clsh(struct opt* p) {
-	// if(verbosity & 2) printf("op_clsh()\n");
+OPTYPE op_clsh(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_clsh()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xd400);
+    return skip;
 }
 
-void op_csub(struct opt* p) {
-	// if(verbosity & 2) printf("op_csub()\n");
+OPTYPE op_csub(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_csub()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xd600);
+    return skip;
 }
 
-void op_cmul(struct opt* p) {
-	// if(verbosity & 2) printf("op_cmul()\n");
+OPTYPE op_cmul(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_cmul()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xd800);
+    return skip;
 }
 
-void op_crsh(struct opt* p) {
-	// if(verbosity & 2) printf("op_crsh()\n");
+OPTYPE op_crsh(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_crsh()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xdb00);
+    return skip;
 }
 
-void op_cdiv(struct opt* p) {
-	// if(verbosity & 2) printf("op_cdiv()\n");
+OPTYPE op_cdiv(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_cdiv()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xdc00);
+    return skip;
 }
 
-void op_ccmp(struct opt* p) {
-	// if(verbosity & 2) printf("op_ccmp()\n");
+OPTYPE op_ccmp(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_ccmp()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xde00);
+    return skip;
 }
 
-void op_ccmp_e(struct opt* p) {
-	// if(verbosity & 2) printf("op_ccmp_e()\n");
+OPTYPE op_ccmp_e(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_ccmp_e()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xd000);
+    return skip;
 }
 
-void op_strcpy(struct opt* p) {
-	// if(verbosity & 2) printf("op_strcpy()\n");
+OPTYPE op_strcpy(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_strcpy()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xe000);
+    return skip;
 }
 
-void op_load_bl(struct opt* p) {
-	// if(verbosity & 2) printf("op_load_bl()\n");
+OPTYPE op_load_bl(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_load_bl()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xe070);
+    return skip;
 }
 
-void op_load_bh(struct opt* p) {
-	// if(verbosity & 2) printf("op_load_bh()\n");
+OPTYPE op_load_bh(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_load_bh()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xe0a0);
+    return skip;
 }
 
-void op_strsize(struct opt* p) {
-	// if(verbosity & 2) printf("op_strsize()\n");
+OPTYPE op_strsize(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_strsize()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xe0d0);
+    return skip;
 }
 
-void op_strrev(struct opt* p) {
-	// if(verbosity & 2) printf("op_strrev()\n");
+OPTYPE op_strrev(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_strrev()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xe100);
+    return skip;
 }
 
-void op_store_bl(struct opt* p) {
-	// if(verbosity & 2) printf("op_store_bl()\n");
+OPTYPE op_store_bl(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_store_bl()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xe140);
+    return skip;
 }
 
-void op_store_bh(struct opt* p) {
-	// if(verbosity & 2) printf("op_store_bh()\n");
+OPTYPE op_store_bh(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_store_bh()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xe180);
+    return skip;
 }
 
-void op_strcat(struct opt* p) {
-	// if(verbosity & 2) printf("op_strcat()\n");
+OPTYPE op_strcat(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_strcat()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xe200);
+    return skip;
 }
 
-void op_strpos(struct opt* p) {
-	// if(verbosity & 2) printf("op_strpos()\n");
+OPTYPE op_strpos(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_strpos()\n");
+	#endif
+    LOAD_ARITHMETIC_ARGS();
+
     unimplemented(0xe400);
+    return skip;
 }
 
-void op_getbyte(struct opt* p) {
-    regt b = reg[p->r1];
-    regt c = reg[p->r2];
+OPTYPE op_getbyte(OPPARAM p) {
+    regt b = reg[GET_AS];
+    regt c = reg[GET_AT];
     regt size = loadvar(4, b);
     if(c >= size) {
-        reg[p->r0] = 0;
+        reg[GET_AR] = 0;
         reg[csrSTATUS] |= FLAG_MASK_C;
 
         // printf("op_getbyte() failed: index %llx >= size %llx\n", c, size);
     } else {
         memt d = loadv16(b + 4 + (c >> 1));
         if(c & 1)
-            reg[p->r0] = d & 0xff;
+            reg[GET_AR] = d & 0xff;
         else
-            reg[p->r0] = (d >> 8);
+            reg[GET_AR] = (d >> 8);
         
 	    // printf("op_getbyte(): %02llx <- string @%llx + octet #%llu\n", reg[p->r0], b, c);
     }
+    return 0;
 }
 
-void op_setbyte(struct opt* p) {
-	// if(verbosity & 2) printf("op_setbyte()\n");
+OPTYPE op_setbyte(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_setbyte()\n");
+	#endif
     unimplemented(0xe800);
+    return 0;
 }
 
-void op_behead(struct opt* p) {
-	// if(verbosity & 2) printf("op_behead()\n");
+OPTYPE op_behead(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_behead()\n");
+	#endif
     unimplemented(0xea00);
+    return 0;
 }
 
-void op_put_bli(struct opt* p) {
-	// if(verbosity & 2) printf("op_put_bli()\n");
+OPTYPE op_put_bli(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_put_bli()\n");
+	#endif
     unimplemented(0xedc0);
+    return 0;
 }
 
-void op_put_bhi(struct opt* p) {
-	// if(verbosity & 2) printf("op_put_bhi()\n");
+OPTYPE op_put_bhi(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_put_bhi()\n");
+	#endif
     unimplemented(0xedf0);
+    return 0;
 }
 
-void op_strcmp(struct opt* p) {
-	// if(verbosity & 2) printf("op_strcmp()\n");
+OPTYPE op_strcmp(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_strcmp()\n");
+	#endif
     unimplemented(0xee00);
+    return 0;
 }

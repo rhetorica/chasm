@@ -33,6 +33,9 @@ void load_mmt(regt pointer);
 octet* flat(regt offset);
 
 static inline regt loadvar(octet width, regt offset) {
+    #ifdef VERBOSITY_MODE
+        if(verbosity > 2) printf(" -- var-loading %d-bit value from 0x%016llx\n", width * 16, offset);
+    #endif
     octet* o = mem(offset, MMT_READABLE_MASK);
     if(width > 1) {
         octet* o_end = mem(offset + width - 1, MMT_READABLE_MASK);
@@ -79,6 +82,9 @@ static inline regt loadvar(octet width, regt offset) {
 }
 
 static inline regt loadvarx(octet width, regt offset) {
+    #ifdef VERBOSITY_MODE
+        if(verbosity > 2) printf(" -- var-loading %d-bit (X) from 0x%016llx\n", width * 16, offset);
+    #endif
     octet* o = mem(offset, MMT_EXECUTABLE_MASK);
     if(width > 1) {
         octet* o_end = mem(offset + width - 1, MMT_EXECUTABLE_MASK);
@@ -125,6 +131,9 @@ static inline regt loadvarx(octet width, regt offset) {
 }
 
 static inline void storevar(octet width, regt value, regt offset) {
+    #ifdef VERBOSITY_MODE
+        if(verbosity > 2) printf(" -- var-storing %d-bit value %llx from 0x%016llx\n", width * 16, value, offset);
+    #endif
     octet* o = mem(offset, MMT_WRITABLE_MASK);
     if(width > 1) {
         octet* o_end = mem((offset + width - 1), MMT_WRITABLE_MASK);
@@ -175,6 +184,9 @@ static inline void storevar(octet width, regt value, regt offset) {
 }
 
 static inline regt loadv64(regt offset) {
+    #ifdef VERBOSITY_MODE
+        if(verbosity > 2) printf(" -- loading 64-bit value from 0x%016llx\n", offset);
+    #endif
     octet* o = mem(offset, MMT_READABLE_MASK);
     octet* o_end = mem(offset + 3, MMT_READABLE_MASK);
     if(o_end - o == 6) {
@@ -204,6 +216,9 @@ static inline regt loadv64(regt offset) {
 }
 
 static inline regt loadv32(regt offset) {
+    #ifdef VERBOSITY_MODE
+        if(verbosity > 2) printf(" -- loading 32-bit value from 0x%016llx\n", offset);
+    #endif
     octet* o = mem(offset, MMT_READABLE_MASK);
     octet* o_end = mem(offset + 1, MMT_READABLE_MASK);
     if(o_end - o == 2) {
@@ -217,11 +232,17 @@ static inline regt loadv32(regt offset) {
 }
 
 static inline regt loadv16(regt offset) {
+    #ifdef VERBOSITY_MODE
+        if(verbosity > 2) printf(" -- loading 16-bit value from 0x%016llx\n", offset);
+    #endif
     octet* o = mem(offset, MMT_READABLE_MASK);
     return mem_to_reg16(*reinterpret_cast<memt*>(o));
 }
 
 static inline regt loadv64x(regt offset) {
+    #ifdef VERBOSITY_MODE
+        if(verbosity > 2) printf(" -- loading 64-bit (X) from 0x%016llx\n", offset);
+    #endif
     octet* o = mem(offset, MMT_EXECUTABLE_MASK);
     octet* o_end = mem(offset + 3, MMT_EXECUTABLE_MASK);
     if(o_end - o == 6) {
@@ -251,6 +272,9 @@ static inline regt loadv64x(regt offset) {
 }
 
 static inline regt loadv32x(regt offset) {
+    #ifdef VERBOSITY_MODE
+        if(verbosity > 2) printf(" -- loading 32-bit (X) from 0x%016llx\n", offset);
+    #endif
     octet* o = mem(offset, MMT_EXECUTABLE_MASK);
     octet* o_end = mem(offset + 1, MMT_EXECUTABLE_MASK);
     if(o_end - o == 2) {
@@ -264,11 +288,17 @@ static inline regt loadv32x(regt offset) {
 }
 
 static inline regt loadv16x(regt offset) {
+    #ifdef VERBOSITY_MODE
+        if(verbosity > 2) printf(" -- loading 16-bit (X) from 0x%016llx\n", offset);
+    #endif
     octet* o = mem(offset, MMT_EXECUTABLE_MASK);
     return mem_to_reg16(*reinterpret_cast<memt*>(o));
 }
 
 static inline void storev16(regt offset, regt value) {
+    #ifdef VERBOSITY_MODE
+        if(verbosity > 2) printf(" -- storing 16-bit value %llx at 0x%016llx\n", value, offset);
+    #endif
     octet* o = mem(offset, MMT_WRITABLE_MASK);
     *(reinterpret_cast<memt*>(o)) = reg_to_mem16(value);
     /** o      = (value >> 8) & 0xff;
@@ -276,6 +306,9 @@ static inline void storev16(regt offset, regt value) {
 }
 
 static inline void storev32(regt offset, regt value) {
+    #ifdef VERBOSITY_MODE
+        if(verbosity > 2) printf(" -- storing 32-bit value %llx at 0x%016llx\n", value, offset);
+    #endif
     octet* o = mem(offset, MMT_WRITABLE_MASK);
     octet* o_end = mem(offset + 1, MMT_WRITABLE_MASK);
     if(o_end - o == 2) {
@@ -289,6 +322,9 @@ static inline void storev32(regt offset, regt value) {
 }
 
 static inline void storev64(regt offset, regt value) {
+    #ifdef VERBOSITY_MODE
+        if(verbosity > 2) printf(" -- storing 64-bit value %llx at 0x%016llx\n", value, offset);
+    #endif
     octet* o = mem(offset, MMT_WRITABLE_MASK);
     octet* o_end = mem((offset + 3), MMT_WRITABLE_MASK);
     if(o_end - o == 6) {
