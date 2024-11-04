@@ -78,6 +78,7 @@ void hang() {
     for(memt bi = 0; bi < 32; ++bi)
         buffer[bi] = 0;
     fgets(buffer, 31, stdin);
+    exit(0);
 }
 
 static int cpu(void *p) {

@@ -1,7 +1,7 @@
 #ifndef MAIN_H
 #define MAIN_H
 
-#define VERSION "4"
+#define VERSION "5"
 
 extern int video_enabled;
 extern int console_enabled;

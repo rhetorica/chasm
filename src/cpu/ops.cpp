@@ -11,6 +11,14 @@
 
 struct opt oplist[] = {
    	{0x0000, &op_null,	255, 255, 255, 0xff, 0x00, 0x00, 0x00}, // null    
+    {0x01f0, &op_push_o,  0, 255, 255, 0xff, 0x00, 0x00, 0x00}, // push.o a   
+    {0x01f1, &op_push_o,  1, 255, 255, 0xff, 0x00, 0x00, 0x00}, // push.o b   
+    {0x01f2, &op_push_o,  2, 255, 255, 0xff, 0x00, 0x00, 0x00}, // push.o c   
+    {0x01f3, &op_push_o,  3, 255, 255, 0xff, 0x00, 0x00, 0x00}, // push.o d   
+    {0x01f4, &op_push_o,  4, 255, 255, 0xff, 0x00, 0x00, 0x00}, // push.o e   
+    {0x01f5, &op_push_o,  5, 255, 255, 0xff, 0x00, 0x00, 0x00}, // push.o f   
+    {0x01f6, &op_push_o,  6, 255, 255, 0xff, 0x00, 0x00, 0x00}, // push.o g   
+    {0x01f7, &op_push_o,  7, 255, 255, 0xff, 0x00, 0x00, 0x00}, // push.o h   
     {0x0180, &op_push,	  0, 255, 255, 0xff, 0x00, 0x00, 0x00}, // push a   
     {0x0181, &op_push,	  1, 255, 255, 0xff, 0x00, 0x00, 0x00}, // push b   
     {0x0182, &op_push,	  2, 255, 255, 0xff, 0x00, 0x00, 0x00}, // push c   
@@ -59,6 +67,14 @@ struct opt oplist[] = {
     {0x012d, &op_push,	 13, 255, 255, 0xff, 0x00, 0x00, 0x01}, // push.w cb   
     {0x012e, &op_push,	 14, 255, 255, 0xff, 0x00, 0x00, 0x01}, // push.w pi   
     {0x012f, &op_push,	  8, 255, 255, 0xff, 0x00, 0x01, 0x01}, // push.w <literal>   
+    {0x02f0, &op_pop_o,   0, 255, 255, 0xff, 0x00, 0x00, 0x00}, // pop.o a   
+    {0x02f1, &op_pop_o,   1, 255, 255, 0xff, 0x00, 0x00, 0x00}, // pop.o b   
+    {0x02f2, &op_pop_o,   2, 255, 255, 0xff, 0x00, 0x00, 0x00}, // pop.o c   
+    {0x02f3, &op_pop_o,   3, 255, 255, 0xff, 0x00, 0x00, 0x00}, // pop.o d   
+    {0x02f4, &op_pop_o,   4, 255, 255, 0xff, 0x00, 0x00, 0x00}, // pop.o e   
+    {0x02f5, &op_pop_o,   5, 255, 255, 0xff, 0x00, 0x00, 0x00}, // pop.o f   
+    {0x02f6, &op_pop_o,   6, 255, 255, 0xff, 0x00, 0x00, 0x00}, // pop.o g   
+    {0x02f7, &op_pop_o,   7, 255, 255, 0xff, 0x00, 0x00, 0x00}, // pop.o h   
     {0x0280, &op_pop,	  0, 255, 255, 0xff, 0x02, 0x00, 0x04}, // pop a   
     {0x0281, &op_pop,	  1, 255, 255, 0xff, 0x02, 0x00, 0x04}, // pop b   
     {0x0282, &op_pop,	  2, 255, 255, 0xff, 0x02, 0x00, 0x04}, // pop c   
@@ -44010,6 +44026,31 @@ OPTYPE op_pop(OPPARAM p) {
         reg[r] = pop32();
     else
         reg[r] = pop16();
+    return 0;
+}
+
+OPTYPE op_push_o(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_push_o()\n");
+	#endif
+    memt r = GET_R;
+    regt a = reg[r];
+    regt d = reg[r | 0x10];
+    push64(a);
+    push64(d);
+    return 0;
+}
+
+OPTYPE op_pop_o(OPPARAM p) {
+	#ifdef VERBOSITY_MODE 
+	if(verbosity & 2) printf("op_pop_o()\n");
+	#endif
+    memt r = GET_R;
+    regt d = pop64();
+    regt a = pop64();
+    reg[r] = a;
+    reg[r | 0x10] = d;
+    
     return 0;
 }
 

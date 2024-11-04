@@ -7,6 +7,8 @@
 #include "cpu/mem.h"
 #include "dev.h"
 
+#define US_OVER_60 16666667
+
 regt VIDEO_MEM_OFFSET;
 
 SDL_Window* ChasmWindow;
@@ -272,6 +274,7 @@ int video(void *p) {
                 SDL_RenderPresent(ChasmRenderer); */
             }
         }
+        SDL_DelayNS(US_OVER_60);
     }
 
     int i = 2000;
